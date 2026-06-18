@@ -23,6 +23,9 @@ from AppKit import (
     NSApplication,
     NSApplicationActivationPolicyAccessory,
     NSAlert,
+    NSFontWeightRegular,
+    NSImage,
+    NSImageSymbolConfiguration,
     NSMenu,
     NSMenuItem,
     NSStatusBar,
@@ -47,7 +50,20 @@ def _log(message: str) -> None:
         pass
 
 
-# Menu-bar glyph + status line for each engine state.
+# Menu-bar icon per engine state. Rendered as monochrome SF Symbol *template*
+# images so they sit natively in the menu bar (auto-tinting for light/dark,
+# matching the system's own icons) instead of a loud emoji. A `waveform` mark
+# reads instantly as "voice"; the busy/recording/error states vary it subtly.
+_SYMBOL = {
+    "loading": "ellipsis",                 # warming the model
+    "ready": "waveform",                   # idle, waiting for fn
+    "listening": "mic.fill",               # recording your voice
+    "transcribing": "ellipsis",            # model is thinking
+    "error": "exclamationmark.triangle",   # something went wrong
+    "blocked": "exclamationmark.triangle",  # missing a permission
+}
+
+# Emoji fallback if SF Symbols aren't available (very old macOS).
 _GLYPH = {
     "loading": "⏳",
     "ready": "🎙️",
@@ -56,6 +72,27 @@ _GLYPH = {
     "error": "⚠️",
     "blocked": "⚠️",
 }
+
+_SYMBOL_CACHE: dict = {}
+
+
+def _symbol_image(name):
+    """An SF Symbol as a sized template NSImage (cached), or None if unavailable."""
+    if name in _SYMBOL_CACHE:
+        return _SYMBOL_CACHE[name]
+    image = None
+    try:
+        image = NSImage.imageWithSystemSymbolName_accessibilityDescription_(name, None)
+        if image is not None:
+            cfg = NSImageSymbolConfiguration.configurationWithPointSize_weight_(
+                15.0, NSFontWeightRegular
+            )
+            image = image.imageWithSymbolConfiguration_(cfg) or image
+            image.setTemplate_(True)  # let the menu bar tint it (light/dark)
+    except Exception:
+        image = None
+    _SYMBOL_CACHE[name] = image
+    return image
 
 
 class DictationController(NSObject):
@@ -78,7 +115,7 @@ class DictationController(NSObject):
     def build(self):
         bar = NSStatusBar.systemStatusBar()
         self.statusItem = bar.statusItemWithLength_(NSVariableStatusItemLength)
-        self.statusItem.button().setTitle_(_GLYPH["loading"])
+        self._glyph("loading")
 
         menu = NSMenu.alloc().init()
 
@@ -235,8 +272,16 @@ class DictationController(NSObject):
 
     @objc.python_method
     def _glyph(self, glyph_key):
-        if self.statusItem is not None:
-            self.statusItem.button().setTitle_(_GLYPH.get(glyph_key, "🎙️"))
+        if self.statusItem is None:
+            return
+        button = self.statusItem.button()
+        image = _symbol_image(_SYMBOL.get(glyph_key, "waveform"))
+        if image is not None:
+            button.setImage_(image)
+            button.setTitle_("")  # image-only; no stray text beside the icon
+        else:  # SF Symbols unavailable — fall back to the emoji glyph
+            button.setImage_(None)
+            button.setTitle_(_GLYPH.get(glyph_key, "🎙️"))
 
     @objc.python_method
     def _alert(self, title, message):
