@@ -1,6 +1,6 @@
 # Terms of Use
 
-**Effective date: [YYYY-MM-DD]**
+**Effective date: 2026-06-18**
 
 These Terms of Use ("Terms") govern your use of the Local Dictation software
 ("the Software"). By downloading, installing, or using the Software, you agree
@@ -90,9 +90,12 @@ provide support, maintenance, or future versions.
 
 ## 9. Governing law
 
-These Terms are governed by the laws of **[your-jurisdiction]**, without regard
-to its conflict-of-laws rules. Any disputes shall be resolved in the courts
-located in **[your-jurisdiction]**, to the extent permitted by law.
+Local Dictation is free, open-source software offered to users worldwide. No
+specific governing-law jurisdiction is designated. You are responsible for using
+the Software in compliance with the laws that apply to you in your own location.
+The disclaimers and limitations of liability in these Terms apply to the fullest
+extent permitted by the mandatory laws that apply to you; nothing here removes
+rights you have under those laws that cannot be waived.
 
 ## 10. Changes to these Terms
 
@@ -102,5 +105,5 @@ Software after changes means you accept the updated Terms.
 
 ## 11. Contact
 
-Questions about these Terms? Contact us at **[your-contact-email]** or open an
-issue at **[your-repo-url]**.
+Questions about these Terms? Open an issue at
+**https://github.com/aman-a-shah/local-transcription/issues**.

@@ -23,8 +23,10 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-# Default endpoint — override to your Vercel domain via DICTATE_UPDATE_URL.
-DEFAULT_BASE = os.environ.get("DICTATE_UPDATE_URL", "https://localdictation.app")
+# Default endpoint — override via DICTATE_UPDATE_URL.
+DEFAULT_BASE = os.environ.get(
+    "DICTATE_UPDATE_URL", "https://local-transcription-tool.vercel.app"
+)
 _TIMEOUT = 6  # seconds; never block the UI for long
 
 

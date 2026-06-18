@@ -8,10 +8,10 @@ found and fixed responsibly.
 
 **Please do not open a public issue for security vulnerabilities.**
 
-Instead, report them privately to **[your-security-email]**. If you prefer
-GitHub's private channel, you can also use the repository's
-**Security → Report a vulnerability** (private advisory) feature at
-**[your-repo-url]**.
+Instead, report them privately through GitHub's built-in channel: open a private
+security advisory at the repository's **Security → Report a vulnerability** page —
+**https://github.com/aman-a-shah/local-transcription/security/advisories/new**.
+This keeps the report confidential until a fix is released.
 
 When reporting, please include:
 
@@ -78,8 +78,8 @@ compute the checksum of your file and compare it to the published value:
 If the value does not match the one published with the release, **do not run
 the file** — delete it and report it to us.
 
-Only download Local Dictation from the official website **[your-domain]** or the
-official releases page at **[your-repo-url]**.
+Only download Local Dictation from the official website **https://local-transcription-tool.vercel.app** or the
+official releases page at **https://github.com/aman-a-shah/local-transcription**.
 
 ## Scope
 

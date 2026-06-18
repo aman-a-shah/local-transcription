@@ -16,7 +16,7 @@ A built-in **dashboard** (recent transcriptions, total words, "time saved,"
 activity streaks) is available from the app — all powered by a local-only
 history that never leaves your device.
 
-**Download:** get the right build for your machine at **[your-domain]**.
+**Download:** get the right build for your machine at **https://local-transcription-tool.vercel.app**.
 
 ### Privacy & legal
 

@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Effective date: [YYYY-MM-DD]**
+**Effective date: 2026-06-18**
 
 Local Dictation is built on one promise: **your voice never leaves your
 device.** This policy explains, in plain language, exactly what the app does
@@ -139,5 +139,6 @@ inspect exactly what it does in the source code.
 
 ## 8. Contact
 
-Questions about privacy? Reach us at **[your-contact-email]**, or open an issue
-at **[your-repo-url]**.
+Questions about privacy? Open an issue at
+**https://github.com/aman-a-shah/local-transcription/issues**. For sensitive
+reports, use the repository's private security advisory channel.

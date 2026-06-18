@@ -26,18 +26,16 @@
 
 .ld-btn--primary {
   background: var(--gold-sheen);
-  background-size: 220% 100%;
   color: var(--on-accent);
   border-color: oklch(0.7 0.12 80 / 0.5);
   box-shadow: var(--shadow-gold), inset 0 1px 0 oklch(1 0 0 / 0.45);
-  /* Slow ambient drift of the metal banding — barely-there life. */
-  animation: ld-gold-drift 9s linear infinite;
 }
 .ld-btn--primary:hover {
   transform: translateY(-1px);
   box-shadow: var(--shadow-lg), inset 0 1px 0 oklch(1 0 0 / 0.55);
 }
-/* Periodic shine sweep — a highlight crosses the metal, then rests (subtle). */
+/* Periodic shine sweep — a highlight crosses the metal, rests off-screen, then
+   repeats. Loops seamlessly because both ends sit fully off the element. */
 .ld-btn--primary::after {
   content: "";
   position: absolute;
@@ -46,27 +44,34 @@
   width: 55%;
   height: 100%;
   background: linear-gradient(100deg, transparent, oklch(1 0 0 / 0.6), transparent);
-  transform: translateX(-180%) skewX(-20deg);
+  transform: translateX(-200%) skewX(-20deg);
   animation: ld-sweep 5.5s var(--ease-out-quart) infinite;
   pointer-events: none;
 }
-.ld-btn--primary:hover::after { animation-duration: 2.4s; }
+.ld-btn--primary:hover::after { animation-duration: 2.2s; }
 
-/* Gentle continuous shimmer for small gold-sheen accents. The element must
-   already have `background: var(--gold-sheen)`. */
-.ld-shimmer {
-  background-size: 220% 100% !important;
-  animation: ld-gold-drift 7s linear infinite;
+/* Gentle shine for small gold accents (a highlight band passing over). The
+   highlight travels off-screen at both ends, so the loop has no visible seam. */
+.ld-shimmer { position: relative; overflow: hidden; isolation: isolate; }
+.ld-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 38%, oklch(1 0 0 / 0.55) 50%, transparent 62%);
+  transform: translateX(-180%);
+  animation: ld-glint 6s var(--ease-out-quart) infinite;
+  pointer-events: none;
 }
 
-@keyframes ld-gold-drift {
-  0% { background-position: 0% 50%; }
-  100% { background-position: 220% 50%; }
-}
 @keyframes ld-sweep {
-  0% { transform: translateX(-180%) skewX(-20deg); }
-  16% { transform: translateX(260%) skewX(-20deg); }
-  100% { transform: translateX(260%) skewX(-20deg); }
+  0% { transform: translateX(-200%) skewX(-20deg); }
+  18% { transform: translateX(320%) skewX(-20deg); }
+  100% { transform: translateX(320%) skewX(-20deg); }
+}
+@keyframes ld-glint {
+  0% { transform: translateX(-180%); }
+  22% { transform: translateX(180%); }
+  100% { transform: translateX(180%); }
 }
 
 .ld-btn--ghost {
@@ -165,12 +170,6 @@
     will-change: opacity, transform;
   }
   .ld-reveal.is-in { opacity: 1; transform: none; }
-}
-
-/* Foil rule shimmers gently. */
-.ld-foil-rule {
-  background-size: 220% 100%;
-  animation: ld-gold-drift 8s linear infinite;
 }
 
 /* Gold check glyph */
