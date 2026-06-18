@@ -26,31 +26,48 @@
 
 .ld-btn--primary {
   background: var(--gold-sheen);
-  background-size: 160% 100%;
-  background-position: 0% 50%;
+  background-size: 220% 100%;
   color: var(--on-accent);
   border-color: oklch(0.7 0.12 80 / 0.5);
   box-shadow: var(--shadow-gold), inset 0 1px 0 oklch(1 0 0 / 0.45);
+  /* Slow ambient drift of the metal banding — barely-there life. */
+  animation: ld-gold-drift 9s linear infinite;
 }
 .ld-btn--primary:hover {
   transform: translateY(-1px);
-  background-position: 100% 50%;
   box-shadow: var(--shadow-lg), inset 0 1px 0 oklch(1 0 0 / 0.55);
 }
-/* Shine sweep — a moving highlight across the metal on hover. */
+/* Periodic shine sweep — a highlight crosses the metal, then rests (subtle). */
 .ld-btn--primary::after {
   content: "";
   position: absolute;
   top: 0;
-  left: -60%;
-  width: 40%;
+  left: 0;
+  width: 55%;
   height: 100%;
-  background: linear-gradient(100deg, transparent, oklch(1 0 0 / 0.65), transparent);
-  transform: skewX(-18deg);
-  transition: left var(--dur-slow) var(--ease-out);
+  background: linear-gradient(100deg, transparent, oklch(1 0 0 / 0.6), transparent);
+  transform: translateX(-180%) skewX(-20deg);
+  animation: ld-sweep 5.5s var(--ease-out-quart) infinite;
   pointer-events: none;
 }
-.ld-btn--primary:hover::after { left: 130%; }
+.ld-btn--primary:hover::after { animation-duration: 2.4s; }
+
+/* Gentle continuous shimmer for small gold-sheen accents. The element must
+   already have `background: var(--gold-sheen)`. */
+.ld-shimmer {
+  background-size: 220% 100% !important;
+  animation: ld-gold-drift 7s linear infinite;
+}
+
+@keyframes ld-gold-drift {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 220% 50%; }
+}
+@keyframes ld-sweep {
+  0% { transform: translateX(-180%) skewX(-20deg); }
+  16% { transform: translateX(260%) skewX(-20deg); }
+  100% { transform: translateX(260%) skewX(-20deg); }
+}
 
 .ld-btn--ghost {
   background: var(--surface);
@@ -148,6 +165,12 @@
     will-change: opacity, transform;
   }
   .ld-reveal.is-in { opacity: 1; transform: none; }
+}
+
+/* Foil rule shimmers gently. */
+.ld-foil-rule {
+  background-size: 220% 100%;
+  animation: ld-gold-drift 8s linear infinite;
 }
 
 /* Gold check glyph */
