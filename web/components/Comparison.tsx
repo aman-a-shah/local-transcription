@@ -16,7 +16,7 @@ const ROWS: { feature: string; cells: [Cell, Cell, Cell] }[] = [
 function Mark({ v }: { v: Cell }) {
   if (v === true)
     return (
-      <span className={styles.yes} aria-label="Yes">
+      <span className={`${styles.yes} ld-shimmer`} aria-label="Yes">
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
           <path d="M3.5 8.5l3 3 6-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         </svg>

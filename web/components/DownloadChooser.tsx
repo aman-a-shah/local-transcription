@@ -38,7 +38,7 @@ export function DownloadChooser() {
               <div>
                 <div className={styles.label}>
                   {b.label}
-                  {isRec && <span className={styles.badge}>Detected</span>}
+                  {isRec && <span className={`${styles.badge} ld-shimmer`}>Detected</span>}
                 </div>
                 <div className={styles.sub}>
                   {b.sublabel} · <span className={styles.mono}>{b.asset}</span>
