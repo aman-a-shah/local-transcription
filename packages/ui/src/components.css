@@ -1,51 +1,77 @@
-/* Shared component classes for the website + dashboard. Import after tokens.css. */
+/* Shared component classes for the website + dashboard. Import after tokens.css.
+ * White / black / metallic-gold. Gradients used ONLY as gold material (sheen),
+ * never as decorative text. */
 
 /* ---- Button --------------------------------------------------------- */
 .ld-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  padding: 0.7rem 1.15rem;
+  padding: 0.7rem 1.2rem;
   border-radius: var(--radius);
   border: 1px solid transparent;
   font-weight: 600;
   font-size: var(--text-sm);
   letter-spacing: var(--tracking-tight);
   line-height: 1;
+  overflow: hidden;
   transition: transform var(--dur-fast) var(--ease-out),
     background var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out),
     box-shadow var(--dur) var(--ease-out), color var(--dur) var(--ease-out);
   white-space: nowrap;
 }
-.ld-btn:active {
-  transform: translateY(1px) scale(0.99);
-}
+.ld-btn:active { transform: translateY(1px) scale(0.99); }
+
 .ld-btn--primary {
-  background: var(--rose);
-  color: var(--on-rose);
-  box-shadow: var(--glow-rose);
+  background: var(--gold-sheen);
+  background-size: 160% 100%;
+  background-position: 0% 50%;
+  color: var(--on-accent);
+  border-color: oklch(0.7 0.12 80 / 0.5);
+  box-shadow: var(--shadow-gold), inset 0 1px 0 oklch(1 0 0 / 0.45);
 }
 .ld-btn--primary:hover {
-  background: var(--rose-bright);
   transform: translateY(-1px);
+  background-position: 100% 50%;
+  box-shadow: var(--shadow-lg), inset 0 1px 0 oklch(1 0 0 / 0.55);
 }
+/* Shine sweep — a moving highlight across the metal on hover. */
+.ld-btn--primary::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -60%;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(100deg, transparent, oklch(1 0 0 / 0.65), transparent);
+  transform: skewX(-18deg);
+  transition: left var(--dur-slow) var(--ease-out);
+  pointer-events: none;
+}
+.ld-btn--primary:hover::after { left: 130%; }
+
 .ld-btn--ghost {
-  background: oklch(1 0 0 / 0.03);
+  background: var(--surface);
   border-color: var(--line-strong);
-  color: var(--ink);
+  color: var(--ink-strong);
 }
 .ld-btn--ghost:hover {
-  background: oklch(1 0 0 / 0.07);
-  border-color: var(--ink);
+  border-color: var(--gold-deep);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
 }
-.ld-btn--lg {
-  padding: 0.95rem 1.6rem;
-  font-size: var(--text-base);
+.ld-btn--lg { padding: 0.95rem 1.7rem; font-size: var(--text-base); }
+.ld-btn--block { width: 100%; }
+
+/* On dark sections */
+.ld-on-dark .ld-btn--ghost {
+  background: oklch(1 0 0 / 0.04);
+  border-color: var(--line-on-dark);
+  color: var(--on-dark);
 }
-.ld-btn--block {
-  width: 100%;
-}
+.ld-on-dark .ld-btn--ghost:hover { border-color: var(--gold); }
 
 /* ---- Keycap --------------------------------------------------------- */
 .ld-kbd {
@@ -57,16 +83,21 @@
   font-family: var(--font-mono);
   font-size: 0.86em;
   font-weight: 500;
-  color: var(--ink);
-  background: linear-gradient(oklch(0.27 0.016 284), var(--surface-2));
+  color: var(--ink-strong);
+  background: var(--surface);
   border: 1px solid var(--line-strong);
   border-bottom-width: 2px;
   border-radius: var(--radius-sm);
-  box-shadow: 0 1px 0 oklch(0 0 0 / 0.4), inset 0 1px 0 oklch(1 0 0 / 0.06);
+  box-shadow: var(--shadow-sm);
   line-height: 1.4;
 }
+.ld-on-dark .ld-kbd {
+  color: var(--on-dark);
+  background: oklch(1 0 0 / 0.06);
+  border-color: var(--line-on-dark);
+}
 
-/* ---- Eyebrow used sparingly (NOT on every section) ------------------ */
+/* ---- Kicker (deliberate, not on every section) --------------------- */
 .ld-tag {
   display: inline-flex;
   align-items: center;
@@ -75,51 +106,59 @@
   font-size: var(--text-xs);
   color: var(--muted);
   letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
 }
 .ld-tag__dot {
-  width: 7px;
-  height: 7px;
+  width: 7px; height: 7px;
   border-radius: var(--radius-full);
-  background: var(--cyan);
-  box-shadow: 0 0 12px var(--cyan);
+  background: var(--gold-sheen);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
-/* ---- Stat (instrument readout, not a SaaS metric card) -------------- */
+/* ---- Stat ----------------------------------------------------------- */
 .ld-stat__num {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1;
-  color: var(--ink);
+  color: var(--ink-strong);
 }
-.ld-stat__label {
-  color: var(--muted);
-  font-size: var(--text-sm);
-}
+.ld-stat__label { color: var(--muted); font-size: var(--text-sm); }
+.ld-on-dark .ld-stat__num { color: var(--on-dark); }
+.ld-on-dark .ld-stat__label { color: var(--muted-on-dark); }
 
-/* ---- Card (used sparingly) ------------------------------------------ */
+/* ---- Card ----------------------------------------------------------- */
 .ld-card {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
 }
 
-/* ---- Reveal on scroll (enhances already-visible content) ------------ */
-.ld-reveal {
-  opacity: 1;
-  transform: none;
-}
+/* ---- Reveal --------------------------------------------------------- */
+.ld-reveal { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: no-preference) {
   .ld-reveal {
     opacity: 0;
-    transform: translateY(18px);
+    transform: translateY(22px);
     transition: opacity var(--dur-slow) var(--ease-out),
       transform var(--dur-slow) var(--ease-out);
     transition-delay: var(--reveal-delay, 0ms);
+    will-change: opacity, transform;
   }
-  .ld-reveal.is-in {
-    opacity: 1;
-    transform: none;
-  }
+  .ld-reveal.is-in { opacity: 1; transform: none; }
 }
+
+/* Gold check glyph */
+.ld-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15em; height: 1.15em;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  background: var(--accent-soft);
+  color: var(--gold-ink);
+}
+.ld-on-dark .ld-check { color: var(--gold); }
