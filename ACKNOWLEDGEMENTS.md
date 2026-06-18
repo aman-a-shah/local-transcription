@@ -86,5 +86,5 @@ writing and the pinned versions in `requirements-base.txt`,
 `requirements.txt`, `requirements-windows.txt`, and
 `requirements-macos-intel.txt`. Licenses can change between versions; the
 authoritative license for any component is the one shipped with the version you
-are using. If you spot an error or omission here, please let us know at
-**[your-contact-email]**.
+are using. If you spot an error or omission here, please open an issue at
+**https://github.com/aman-a-shah/local-transcription/issues**.

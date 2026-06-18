@@ -86,6 +86,6 @@ builds are not yet code-signed; signing is planned.
 
 ## Reporting bugs and security issues
 
-- **Bugs / features:** open an issue at **[your-repo-url]**.
+- **Bugs / features:** open an issue at **https://github.com/aman-a-shah/local-transcription**.
 - **Security vulnerabilities:** do **not** open a public issue — follow
   `SECURITY.md`.
