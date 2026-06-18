@@ -1,7 +1,10 @@
 .hero {
   position: relative;
   overflow: hidden;
-  padding-block: clamp(var(--space-7), 7vw, var(--space-10));
+  min-height: calc(100svh - 3.6rem); /* fill the viewport below the sticky nav */
+  display: flex;
+  align-items: center;
+  padding-block: clamp(var(--space-6), 5vw, var(--space-8));
   border-bottom: 1px solid var(--line);
   background: var(--bg);
 }
