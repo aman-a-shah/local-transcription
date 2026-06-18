@@ -32,7 +32,7 @@ export function Logo({ size = 28, withWordmark = true, className }: Props) {
             width="2.8"
             height={h}
             rx="1.4"
-            fill="var(--accent, #db4a3d)"
+            fill="var(--gold, #d4af37)"
           />
         ))}
       </svg>

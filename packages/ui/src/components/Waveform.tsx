@@ -15,10 +15,10 @@ type Props = {
   intensity?: number;
 };
 
-// Solid colors only (no gradients). Coral = the voice; blue = listening.
-const ACCENT = "oklch(0.6 0.2 22)";
-const LIVE = "oklch(0.55 0.13 235)";
-const MINT = "oklch(0.6 0.14 162)";
+// Gold = the voice; champagne = listening; a faint green confirm.
+const ACCENT = "oklch(0.8 0.13 88)";
+const LIVE = "oklch(0.92 0.07 96)";
+const MINT = "oklch(0.74 0.14 150)";
 
 function prefersReducedMotion() {
   return (

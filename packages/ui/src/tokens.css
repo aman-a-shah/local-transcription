@@ -1,40 +1,72 @@
 /* Local Dictation — shared design tokens.
  *
- * The single source of truth for the website and the in-app dashboard, so the
- * two feel like one object. Theme: light, premium, precise — a white canvas with
- * deep ink, generous space, crisp hairlines, soft shadows, and ONE confident
- * coral accent (the voice). No gradients. See DESIGN.md.
+ * The single source of truth for the website and the in-app dashboard.
+ * Theme: white / black / shiny textured GOLD. Pure-white canvas, near-black ink,
+ * and a metallic gold accent that behaves like real metal — a banded sheen on
+ * surfaces, a readable bronze-gold for text on white, and bright gold on the
+ * dramatic black sections. Soft shadows, crisp hairlines, fine texture. See
+ * DESIGN.md.
  */
 
 :root {
-  /* ---- Color (OKLCH) -------------------------------------------------- */
-  --bg: oklch(1 0 0); /* pure white — Stripe/Apple-grade base */
-  --bg-soft: oklch(0.985 0.003 265); /* faint cool gray for alternating bands */
-  --surface: oklch(1 0 0); /* cards: white + hairline + soft shadow */
-  --surface-soft: oklch(0.978 0.004 265);
-  --surface-ink: oklch(0.22 0.012 265); /* rare dark panel (e.g. demo) */
+  /* ---- Neutrals ------------------------------------------------------- */
+  --bg: oklch(1 0 0); /* pure white */
+  --bg-soft: oklch(0.984 0.002 95); /* faintest warm-neutral band */
+  --surface: oklch(1 0 0);
+  --surface-soft: oklch(0.976 0.003 95);
+  --ink-strong: oklch(0.16 0.005 270); /* headings — near black */
+  --ink: oklch(0.24 0.006 270); /* body */
+  --muted: oklch(0.46 0.008 270); /* secondary (≥4.5:1 on white) */
+  --faint: oklch(0.6 0.008 270); /* tertiary, large only */
 
-  --ink: oklch(0.27 0.011 265); /* body text — deep, slightly cool */
-  --ink-strong: oklch(0.19 0.012 265); /* headings */
-  --muted: oklch(0.47 0.012 265); /* secondary text (≥4.5:1 on white) */
-  --faint: oklch(0.6 0.012 265); /* tertiary, large text only */
-  --on-dark: oklch(0.96 0.003 265); /* text on the rare dark panel */
-  --muted-on-dark: oklch(0.72 0.012 265);
+  --line: oklch(0.16 0.005 270 / 0.1);
+  --line-strong: oklch(0.16 0.005 270 / 0.16);
 
-  --line: oklch(0.27 0.011 265 / 0.1);
-  --line-strong: oklch(0.27 0.011 265 / 0.16);
+  /* Dark sections (white/black/gold drama) */
+  --ink-panel: oklch(0.155 0.006 280); /* rich near-black panel */
+  --ink-panel-2: oklch(0.2 0.008 280);
+  --on-dark: oklch(0.96 0.003 95);
+  --muted-on-dark: oklch(0.74 0.01 95);
   --line-on-dark: oklch(1 0 0 / 0.12);
 
-  --accent: oklch(0.6 0.2 22); /* coral — the voice; used sparingly */
-  --accent-strong: oklch(0.53 0.21 22); /* hover/active */
-  --accent-soft: oklch(0.6 0.2 22 / 0.1); /* tint backgrounds */
-  --accent-line: oklch(0.6 0.2 22 / 0.3);
-  --on-accent: oklch(1 0 0);
+  /* ---- Gold ----------------------------------------------------------- */
+  --gold-light: oklch(0.93 0.06 96); /* champagne highlight */
+  --gold: oklch(0.82 0.13 90); /* bright gold (fills, on-dark text) */
+  --gold-deep: oklch(0.66 0.12 78); /* antique gold */
+  --gold-ink: oklch(0.52 0.1 72); /* readable gold/bronze TEXT on white (~4.6:1) */
+  --gold-ink-strong: oklch(0.44 0.1 70);
 
-  --live: oklch(0.55 0.13 235); /* cool blue — "listening" only */
-  --live-soft: oklch(0.55 0.13 235 / 0.1);
-  --mint: oklch(0.58 0.13 162); /* "inserted ✓" confirm */
-  --mint-soft: oklch(0.58 0.13 162 / 0.12);
+  /* Metallic sheen — a banded gradient that reads as brushed gold foil.
+     Used on surfaces/buttons/foil rules ONLY (never as gradient text). */
+  --gold-sheen: linear-gradient(
+    105deg,
+    oklch(0.9 0.07 98) 0%,
+    oklch(0.82 0.13 90) 22%,
+    oklch(0.7 0.12 80) 44%,
+    oklch(0.95 0.06 100) 58%,
+    oklch(0.78 0.13 86) 74%,
+    oklch(0.66 0.12 78) 100%
+  );
+  --gold-sheen-soft: linear-gradient(
+    105deg,
+    oklch(0.95 0.04 98) 0%,
+    oklch(0.9 0.07 92) 50%,
+    oklch(0.84 0.09 84) 100%
+  );
+
+  /* Semantic accent aliases (most components use these) */
+  --accent: var(--gold-ink); /* default = readable on white */
+  --accent-strong: var(--gold-ink-strong);
+  --accent-bright: var(--gold); /* fills / on-dark / graphics */
+  --accent-soft: oklch(0.82 0.13 90 / 0.16);
+  --accent-line: oklch(0.66 0.12 78 / 0.45);
+  --on-accent: oklch(0.18 0.03 80); /* near-black text on gold */
+
+  --live: var(--gold-light); /* "listening" — brighter champagne, stays on-palette */
+  --mint: oklch(0.72 0.14 145); /* "inserted ✓" — the only non-gold, used tiny */
+
+  /* ---- Texture (subtle grain for premium tactility) ------------------ */
+  --noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 
   /* ---- Typography ----------------------------------------------------- */
   --font-sans: "Schibsted Grotesk Variable", ui-sans-serif, system-ui, -apple-system,
@@ -42,7 +74,6 @@
   --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", "Cascadia Code",
     Menlo, Consolas, monospace;
 
-  /* Fluid type scale (ratio ~1.25), hero capped at 6rem */
   --text-xs: 0.78rem;
   --text-sm: 0.875rem;
   --text-base: 1rem;
@@ -58,7 +89,7 @@
   --leading-normal: 1.6;
   --tracking-display: -0.03em;
   --tracking-tight: -0.015em;
-  --tracking-wide: 0.04em;
+  --tracking-wide: 0.06em;
 
   /* ---- Space + radius ------------------------------------------------- */
   --space-1: 0.25rem;
@@ -79,23 +110,23 @@
   --radius-xl: 26px;
   --radius-full: 999px;
 
-  --content: 1180px;
+  --content: 1200px;
   --content-narrow: 720px;
 
-  /* ---- Elevation (soft, premium; no gradients) ----------------------- */
-  --shadow-sm: 0 1px 2px oklch(0.2 0.02 265 / 0.06);
-  --shadow: 0 2px 4px oklch(0.2 0.02 265 / 0.04), 0 8px 24px -10px oklch(0.2 0.02 265 / 0.12);
-  --shadow-lg: 0 4px 8px oklch(0.2 0.02 265 / 0.05), 0 32px 64px -24px oklch(0.2 0.02 265 / 0.22);
-  --shadow-accent: 0 10px 30px -10px oklch(0.6 0.2 22 / 0.4);
+  /* ---- Elevation ----------------------------------------------------- */
+  --shadow-sm: 0 1px 2px oklch(0.16 0.01 270 / 0.07);
+  --shadow: 0 2px 4px oklch(0.16 0.01 270 / 0.05), 0 10px 28px -12px oklch(0.16 0.01 270 / 0.14);
+  --shadow-lg: 0 4px 10px oklch(0.16 0.01 270 / 0.06), 0 34px 70px -26px oklch(0.16 0.01 270 / 0.26);
+  --shadow-gold: 0 10px 28px -10px oklch(0.7 0.12 82 / 0.5);
 
   /* ---- Motion -------------------------------------------------------- */
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1); /* expo-ish */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
   --dur-fast: 140ms;
   --dur: 240ms;
   --dur-slow: 620ms;
 
-  /* ---- Z-index scale ------------------------------------------------- */
+  /* ---- Z-index ------------------------------------------------------- */
   --z-base: 0;
   --z-dropdown: 100;
   --z-sticky: 200;
@@ -110,13 +141,8 @@
 /* ---- Reset + base ---------------------------------------------------- */
 *,
 *::before,
-*::after {
-  box-sizing: border-box;
-}
-
-* {
-  margin: 0;
-}
+*::after { box-sizing: border-box; }
+* { margin: 0; }
 
 html {
   -webkit-text-size-adjust: 100%;
@@ -141,42 +167,44 @@ h1, h2, h3, h4 {
   font-weight: 600;
   text-wrap: balance;
 }
-
 h4 { line-height: var(--leading-snug); }
-
 p { text-wrap: pretty; }
+a { color: inherit; text-decoration: none; }
+button { font: inherit; color: inherit; cursor: pointer; }
+img, svg, canvas { display: block; max-width: 100%; }
 
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
-button {
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-}
-
-img, svg, canvas {
-  display: block;
-  max-width: 100%;
-}
-
-::selection {
-  background: var(--accent);
-  color: var(--on-accent);
-}
+::selection { background: var(--gold); color: var(--on-accent); }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--gold-deep);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
 
+/* Foil rule — a thin metallic gold divider */
+.ld-foil-rule {
+  height: 2px;
+  border: 0;
+  background: var(--gold-sheen);
+  border-radius: var(--radius-full);
+  opacity: 0.9;
+}
+
+/* Fine grain texture overlay (apply to a positioned ::before host) */
+.ld-grain::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--noise);
+  background-size: 160px 160px;
+  opacity: 0.025;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+  z-index: 1;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  *, *::before, *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
