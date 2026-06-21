@@ -69,6 +69,14 @@ jobs:
             target: windows
             arch: x64
 
+    # secrets.* can't be used in step `if:` expressions, so surface the gating
+    # secrets as job-level env vars and test those instead. Signing steps run
+    # only when the corresponding secret is configured; otherwise builds ship
+    # unsigned.
+    env:
+      MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+      WINDOWS_CERT_PFX: ${{ secrets.WINDOWS_CERT_PFX }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -152,7 +160,7 @@ jobs:
       # macOS: optional signing + notarization, then DMG.
       # =====================================================================
       - name: Codesign & notarize (macOS)
-        if: matrix.target == 'mac' && secrets.MACOS_CERT_P12 != ''
+        if: matrix.target == 'mac' && env.MACOS_CERT_P12 != ''
         env:
           MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
@@ -211,7 +219,7 @@ jobs:
           desktop/macos/dmg.sh "${{ matrix.arch }}"
 
       - name: Sign DMG (macOS)
-        if: matrix.target == 'mac' && secrets.MACOS_CERT_P12 != ''
+        if: matrix.target == 'mac' && env.MACOS_CERT_P12 != ''
         shell: bash
         run: |
           set -euo pipefail
@@ -242,7 +250,7 @@ jobs:
           & "$iscc" "/DAppVersion=${{ steps.ver.outputs.version }}" "desktop\windows\installer.iss"
 
       - name: Sign installer (Windows)
-        if: matrix.target == 'windows' && secrets.WINDOWS_CERT_PFX != ''
+        if: matrix.target == 'windows' && env.WINDOWS_CERT_PFX != ''
         shell: pwsh
         env:
           WINDOWS_CERT_PFX: ${{ secrets.WINDOWS_CERT_PFX }}
