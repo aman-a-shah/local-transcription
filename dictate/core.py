@@ -18,6 +18,7 @@ States emitted via ``on_state(state, info)``:
 from __future__ import annotations
 
 import os
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Optional
@@ -70,6 +71,17 @@ class DictationEngine:
         # still retracts. Single worker keeps pastes (and the clipboard) ordered.
         self._inject_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="dictate-inj")
         self._on_state: StateCallback = on_state or (lambda state, info=None: None)
+        # Mic warm-window bookkeeping. The recorder leaves its stream running
+        # between takes so a follow-up press captures instantly; after
+        # CONFIG.mic_warm_seconds of no presses we stop it to release the mic
+        # (turning off the macOS "in use" dot). _take_gen is bumped on every press
+        # so a release timer that fires after a newer take simply no-ops.
+        self._idle_lock = threading.Lock()
+        self._idle_timer: Optional[threading.Timer] = None
+        self._take_gen = 0
+        # Set once shutdown() begins so the daemon idle-release Timer (which can
+        # fire after the pools are gone) doesn't submit into a closed pool.
+        self._shutting_down = False
         # When did the model last do real work? Used to decide whether to re-warm
         # it on the next key-down (see on_press). Starts "now" so the warmup at
         # launch counts and we don't double-warm the very first take.
@@ -112,6 +124,7 @@ class DictationEngine:
         # potentially-slow part — opening/resuming the mic stream — is handed to the
         # capture worker. The tiny hand-off latency is far below human reaction time
         # and never risks the tap.
+        self._cancel_idle_release()  # a press means we're active; don't release the mic
         self._emit("listening")
         self.feedback.listening()
         self._capture_pool.submit(self._begin)
@@ -142,6 +155,53 @@ class DictationEngine:
         except Exception as exc:  # priming is best-effort
             _dlog(f"prime skipped: {exc}")
 
+    # -- mic warm-window -----------------------------------------------------
+    def _cancel_idle_release(self) -> None:
+        """Mark a new take and cancel any pending mic release. Called on press."""
+        with self._idle_lock:
+            self._take_gen += 1
+            if self._idle_timer is not None:
+                self._idle_timer.cancel()
+                self._idle_timer = None
+
+    def _arm_idle_release(self) -> None:
+        """After a take, schedule the mic to be released once the warm window of
+        inactivity passes. Called on release (off the tap thread)."""
+        window = CONFIG.mic_warm_seconds
+        if window <= 0:
+            # Warming disabled: release immediately (old behaviour — mic dot off
+            # between takes, every press pays the start-up cost).
+            self._capture_pool.submit(self.recorder.pause)
+            return
+        with self._idle_lock:
+            gen = self._take_gen
+            if self._idle_timer is not None:
+                self._idle_timer.cancel()
+            timer = threading.Timer(window, self._fire_idle_release, args=(gen,))
+            timer.daemon = True
+            self._idle_timer = timer
+            timer.start()
+
+    def _fire_idle_release(self, gen: int) -> None:
+        # Runs on the Timer thread; do the actual stream stop on the capture worker
+        # so it serialises with start/stop (never races a concurrent press). If the
+        # app is shutting down the pool may already be closed — skip rather than
+        # raise (RuntimeError) on a doomed submit.
+        if self._shutting_down:
+            return
+        try:
+            self._capture_pool.submit(lambda: self._release_if_idle(gen))
+        except RuntimeError:
+            pass  # pool shut down between the guard and here; nothing to do
+
+    def _release_if_idle(self, gen: int) -> None:
+        with self._idle_lock:
+            if gen != self._take_gen:
+                return  # a newer take happened since arming; stay warm
+        if self.recorder._recording:
+            return  # mid-take; the next release will re-arm
+        self.recorder.pause()
+
     def on_release(self) -> None:
         # Don't touch the recorder here — recorder.stop() sleeps for the trailing
         # grace window, which must never run on the tap thread. Hand it off (to the
@@ -151,6 +211,8 @@ class DictationEngine:
     def _finalize(self) -> None:
         try:
             audio, duration = self.recorder.stop()  # includes the post-release grace
+            # Stream is now warm-but-idle; schedule its release after the warm window.
+            self._arm_idle_release()
             rms = float(np.sqrt(np.mean(audio**2))) if audio.size else 0.0
             peak = float(np.abs(audio).max()) if audio.size else 0.0
             _dlog(f"release: {audio.size} samples, {duration:0.2f}s, rms={rms:0.4f}, peak={peak:0.4f}")
@@ -186,6 +248,7 @@ class DictationEngine:
         """
         if self.recorder._recording:  # cheap best-effort; stop + discard
             self.recorder.stop()
+            self._arm_idle_release()  # stream is left warm; schedule its release
         self._emit("idle")
 
     # -- worker thread -------------------------------------------------------
@@ -254,7 +317,16 @@ class DictationEngine:
             _dlog(f"history write failed: {exc}")
 
     def shutdown(self) -> None:
-        self._capture_pool.shutdown(wait=False)
-        self._inject_pool.shutdown(wait=False)
+        # Drain in dependency order and WAIT, so nothing native is mid-flight when
+        # the process exits (the abandoned-thread race that crashed quit):
+        #   capture  -> finishes any start/stop/finalize (and stops queuing work),
+        #   stt      -> finishes the in-flight transcription (it may hand text to
+        #               the inject pool, which is still open at this point),
+        #   inject   -> finishes the paste + done cue,
+        #   recorder -> closed last, once no capture task can still touch it.
+        self._shutting_down = True
+        self._cancel_idle_release()
+        self._capture_pool.shutdown(wait=True)
         self._pool.shutdown(wait=True)
+        self._inject_pool.shutdown(wait=True)
         self.recorder.close()

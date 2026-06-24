@@ -51,6 +51,12 @@ def _log(message: str) -> None:
         pass
 
 
+def _traceback() -> str:
+    import traceback
+
+    return traceback.format_exc()
+
+
 # Menu-bar icon per engine state. Rendered as monochrome SF Symbol *template*
 # images so they sit natively in the menu bar (auto-tinting for light/dark,
 # matching the system's own icons) instead of a loud emoji. A `waveform` mark
@@ -334,10 +340,43 @@ class DictationController(NSObject):
         open_dashboard()
 
     def quitApp_(self, _):  # noqa: N802
+        # Tear everything down BEFORE terminate_ runs exit(): a clean stop here
+        # means no background thread (event tap, watchdog, overlay timer, audio
+        # callback) is still running native code when the process exits — that
+        # race was the crash-on-quit.
+        self._teardown()
+        NSApplication.sharedApplication().terminate_(self)
+
+    def applicationWillTerminate_(self, _notification):  # noqa: N802
+        # Backstop for any other termination route (Cmd-Q, logout, the app menu).
+        # Idempotent with quitApp_, so running both is harmless.
+        self._teardown()
+
+    @objc.python_method
+    def _teardown(self):
+        """Stop all background activity in dependency order. Runs once."""
+        if getattr(self, "_torn_down", False):
+            return
+        self._torn_down = True
+        # 1. Stop the hotkey first: once its tap + watchdog threads are joined no
+        #    new press/release can fire into the engine while we wind it down.
+        try:
+            if self.hotkey is not None:
+                self.hotkey.stop()
+        except Exception:
+            _log("teardown: hotkey stop failed\n" + _traceback())
+        # 2. Stop the overlay's render timer and order the panel out (main thread).
+        try:
+            if self.overlay is not None:
+                self.overlay.teardown()
+        except Exception:
+            _log("teardown: overlay teardown failed\n" + _traceback())
+        # 3. Drain the engine's worker pools and close the mic stream last, so no
+        #    capture / transcription / paste is mid-flight at exit.
         try:
             self.engine.shutdown()
-        finally:
-            NSApplication.sharedApplication().terminate_(self)
+        except Exception:
+            _log("teardown: engine shutdown failed\n" + _traceback())
 
 
 def _do_warmup(controller):

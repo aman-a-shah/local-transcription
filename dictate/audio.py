@@ -44,6 +44,12 @@ class Recorder:
         if status:
             # Overflows are non-fatal; just note them on stderr via print.
             print(f"[audio] {status}", flush=True)
+        # The stream is left running *between* takes (kept warm so the next press
+        # captures instantly), so blocks keep arriving while idle. Drop them with a
+        # cheap unsynchronised flag read before doing any work — the authoritative
+        # check happens again under the lock below.
+        if not self._recording:
+            return
         block = indata[:, 0]
         # Cheap loudness read for the overlay; fine to compute outside the lock.
         self._level = float(np.sqrt(np.mean(block * block))) if frames else 0.0
@@ -169,20 +175,35 @@ class Recorder:
             frames = self._frames
             self._frames = []
 
-        # Keep the stream object alive but inactive between takes (cheap restart).
-        # A dead device can throw here; drop the stream so the next take rebuilds.
-        if self._stream is not None:
-            try:
-                if self._stream.active:
-                    self._stream.stop()
-            except Exception as exc:
-                print(f"[audio] stream stop failed ({exc}); will rebuild", flush=True)
-                self._discard_stream()
+        # Deliberately leave the stream RUNNING. A stopped CoreAudio input stream
+        # takes ~180 ms to deliver its first sample on the next start — paid on
+        # every press if we stop between takes. Keeping it warm makes a follow-up
+        # press capture instantly (it just flips _recording back on). The engine
+        # calls pause() to stop the stream after an idle window so the mic is
+        # released and the "in use" dot turns off when you're done dictating.
 
         if not frames:
             return np.zeros(0, dtype=np.float32), duration
         audio = np.concatenate(frames).astype(np.float32, copy=False)
         return audio, duration
+
+    def pause(self) -> None:
+        """Stop the warm stream's IO to release the mic (turns off the in-use dot).
+
+        Keeps the stream object open so the next start only rebuilds if the default
+        device changed meanwhile. Never pauses mid-take. Best-effort: a dead device
+        is discarded so the next start builds a fresh one.
+        """
+        with self._lock:
+            if self._recording:
+                return
+        if self._stream is not None:
+            try:
+                if self._stream.active:
+                    self._stream.stop()
+            except Exception as exc:
+                print(f"[audio] stream pause failed ({exc}); will rebuild", flush=True)
+                self._discard_stream()
 
     def close(self) -> None:
         self._discard_stream()

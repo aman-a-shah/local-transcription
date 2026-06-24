@@ -60,6 +60,9 @@ class DictationApp:
 
     def shutdown(self) -> None:
         print("\nShutting down…", flush=True)
+        stop = getattr(self._hotkey, "stop", None)
+        if callable(stop):
+            stop()
         self.engine.shutdown()
 
 

@@ -96,7 +96,21 @@ class Config:
     # 16 kHz mono is Whisper's native rate, so capturing there avoids a resample.
     sample_rate: int = 16_000
     channels: int = 1
-    blocksize: int = 1_600  # 100 ms blocks -> snappy start/stop
+    # 20 ms blocks. With the stream kept warm between takes (see mic_warm_seconds),
+    # the only delay between pressing fn and capturing your voice is the wait for
+    # the next callback boundary — so a small block makes that wait imperceptible
+    # (~20 ms vs ~100 ms). Still far larger than CoreAudio's frame size, so no
+    # overrun risk. Override with DICTATE_BLOCKSIZE if a slow device underruns.
+    blocksize: int = field(default_factory=lambda: _env_int("BLOCKSIZE", 320))
+
+    # Keep the microphone stream *running* (warm) for this long after the last
+    # take, so a follow-up press captures instantly instead of paying CoreAudio's
+    # ~180 ms device start-up every time. After this idle window the stream is
+    # stopped, releasing the mic and turning off the macOS "in use" dot — so the
+    # only press that ever waits is the first one after a long pause. 0 releases
+    # the mic immediately after each take (old behaviour, dot off but every press
+    # pays the start-up cost).
+    mic_warm_seconds: float = field(default_factory=lambda: _env_float("MIC_WARM_SECONDS", 180.0))
 
     # Ignore taps shorter than this (accidental brushes of the key).
     min_record_seconds: float = field(default_factory=lambda: _env_float("MIN_SECONDS", 0.30))

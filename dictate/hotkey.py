@@ -48,6 +48,10 @@ class FnHotkey:
         self._thread: Optional[threading.Thread] = None
         self._watchdog_thread: Optional[threading.Thread] = None
         self._stop_watchdog = threading.Event()
+        # The CFRunLoop the tap is installed on (the dedicated thread's loop in
+        # background mode). Captured so stop() can wake it to exit cleanly.
+        self._runloop = None
+        self._stopped = False
         # Serialises press/release dispatch so the watchdog and the tap callback
         # can't both fire on_press/on_release at the same instant.
         self._dispatch_lock = threading.Lock()
@@ -188,6 +192,10 @@ class FnHotkey:
                 error.append(exc)
                 ready.set()
                 return
+            # Capture THIS thread's run loop so stop() (called from the main
+            # thread on quit) can wake it and let CFRunLoopRun return, instead of
+            # leaving the thread spinning native code into process exit (a crash).
+            self._runloop = Quartz.CFRunLoopGetCurrent()
             self._log("[hotkey] tap running on dedicated thread")
             ready.set()
             Quartz.CFRunLoopRun()  # blocks this thread, not the UI
@@ -232,4 +240,43 @@ class FnHotkey:
     def run(self) -> None:
         """Install the tap and block on its own run loop (terminal/CLI mode)."""
         self.install()
+        self._runloop = Quartz.CFRunLoopGetCurrent()
         Quartz.CFRunLoopRun()
+
+    def stop(self) -> None:
+        """Tear the tap down and stop its threads. Idempotent; safe from any thread.
+
+        Called on quit BEFORE the process exits. Without this, the tap thread
+        (in CFRunLoopRun) and the watchdog thread keep running native Quartz code
+        straight into ``exit()`` — the race that crashed the app on quit — or, if
+        the run loop has already died, the watchdog spins forever re-enabling a
+        dead tap (the zombie that made dictation "stop working"). Disabling the
+        tap, stopping its run loop, and joining both threads removes both.
+        """
+        if self._stopped:
+            return
+        self._stopped = True
+
+        # 1. Stop the watchdog first so it can't re-enable the tap we're killing.
+        self._stop_watchdog.set()
+
+        # 2. Disable the tap so no further callbacks fire into a tearing-down app.
+        if self._tap is not None:
+            try:
+                Quartz.CGEventTapEnable(self._tap, False)
+            except Exception as exc:  # pragma: no cover - best effort
+                print(f"[hotkey] tap disable on stop failed: {exc}", flush=True)
+
+        # 3. Wake the dedicated run loop so CFRunLoopRun returns and the thread ends.
+        if self._runloop is not None:
+            try:
+                Quartz.CFRunLoopStop(self._runloop)
+            except Exception as exc:  # pragma: no cover - best effort
+                print(f"[hotkey] runloop stop failed: {exc}", flush=True)
+
+        # 4. Join both threads so none is mid-callback when the process exits.
+        for thread in (self._thread, self._watchdog_thread):
+            if thread is not None and thread.is_alive() and thread is not threading.current_thread():
+                thread.join(timeout=2.0)
+
+        self._log("[hotkey] stopped")

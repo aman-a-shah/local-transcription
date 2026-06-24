@@ -119,6 +119,16 @@ class TrayApp:
         )
 
     def _quit(self):
+        # Stop the push-to-talk listener first so no press/release can fire into
+        # the engine while we wind it down, then drain the engine, then end the
+        # tray loop — the same clean ordering the macOS app uses on quit.
+        if self.hotkey is not None:
+            stop = getattr(self.hotkey, "stop", None)
+            if callable(stop):
+                try:
+                    stop()
+                except Exception:
+                    pass
         try:
             self.engine.shutdown()
         finally:
