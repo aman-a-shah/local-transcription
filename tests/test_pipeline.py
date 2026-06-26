@@ -7,6 +7,7 @@ save/restore so the injector's stateful bits are covered headlessly.
 
 from __future__ import annotations
 
+import importlib.util
 import shutil
 import subprocess
 import sys
@@ -53,6 +54,10 @@ def test_trim_silence_keeps_speech():
 @pytest.mark.skipif(
     shutil.which("say") is None,
     reason="needs macOS `say` to synthesize speech (and downloads a model)",
+)
+@pytest.mark.skipif(
+    importlib.util.find_spec("faster_whisper") is None,
+    reason="needs the faster-whisper backend (a heavy native dep not in CI)",
 )
 def test_transcribes_speech():
     tr = Transcriber()

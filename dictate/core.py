@@ -25,13 +25,16 @@ from typing import Callable, Optional
 
 import numpy as np
 
-from .audio import Recorder
 from .backends import create_transcriber
 from .backends.base import has_speech
 from .config import CONFIG
-from .platforms import Feedback, inject
 from .polish import polish
 from .paths import log_path
+
+# NOTE: `.audio` (sounddevice) and `.platforms` (pyobjc/pywin32) are imported
+# lazily inside DictationEngine, not here. That keeps importing this module — and
+# its pure-Python `_Lane`, which the tests exercise directly — free of the native
+# audio/GUI deps, so the lightweight test environment doesn't need them.
 
 StateCallback = Callable[[str, Optional[dict]], None]
 
@@ -166,6 +169,9 @@ class _Lane:
 
 class DictationEngine:
     def __init__(self, on_state: Optional[StateCallback] = None) -> None:
+        from .audio import Recorder  # native (sounddevice); imported on first use
+        from .platforms import Feedback  # native (pyobjc/pywin32)
+
         self.recorder = Recorder()
         self.transcriber = create_transcriber()
         self.feedback = Feedback()
@@ -421,6 +427,8 @@ class DictationEngine:
     def _deliver(self, text: str) -> None:
         """Paste the text + play the done cue. Runs on the inject worker; guarded
         so a paste failure never kills the worker or leaks an exception."""
+        from .platforms import inject  # native (pyobjc/pywin32); imported on use
+
         try:
             inject(text)
             self.feedback.done()
