@@ -35,7 +35,7 @@ from AppKit import (
     NSView,
     NSWindowCollectionBehaviorCanJoinAllSpaces,
     NSWindowCollectionBehaviorFullScreenAuxiliary,
-    NSWindowCollectionBehaviorStationary,
+    NSWindowCollectionBehaviorIgnoresCycle,
     NSWindowStyleMaskBorderless,
     NSWindowStyleMaskNonactivatingPanel,
 )
@@ -189,15 +189,9 @@ class Overlay(NSObject):
         panel.setOpaque_(False)
         panel.setBackgroundColor_(NSColor.clearColor())
         panel.setHasShadow_(True)
-        panel.setLevel_(NSScreenSaverWindowLevel)  # float above menu bar / full-screen
         panel.setIgnoresMouseEvents_(True)         # clicks pass straight through
         panel.setReleasedWhenClosed_(False)
         panel.setHidesOnDeactivate_(False)
-        panel.setCollectionBehavior_(
-            NSWindowCollectionBehaviorCanJoinAllSpaces
-            | NSWindowCollectionBehaviorFullScreenAuxiliary
-            | NSWindowCollectionBehaviorStationary
-        )
 
         view = _WaveView.alloc().initWithFrame_(rect)
         # Layer-back the view so an explicit Core Animation transaction (see show())
@@ -212,6 +206,45 @@ class Overlay(NSObject):
         self._view = view
         self._alpha = 0.0
         panel.setAlphaValue_(0.0)
+        self._apply_floating_behavior()
+
+    @objc.python_method
+    def _apply_floating_behavior(self):
+        """Make the panel a true global HUD: above every app, on every Space.
+
+        This is the fix for "the waveform shows up on the desktop / another
+        Space instead of over the app I'm using." The panel must:
+
+        * sit ABOVE the active app and the menu bar (``NSScreenSaverWindowLevel``,
+          which also clears full-screen app windows), and
+        * follow you to whatever Space is frontmost, including a full-screen
+          app's own Space (``CanJoinAllSpaces`` + ``FullScreenAuxiliary``).
+
+        The previous behavior also set ``NSWindowCollectionBehaviorStationary``.
+        That flag means "pin this window to the desktop; it does NOT participate
+        in Spaces" — it's for wallpaper / desktop-widget windows. Combined with
+        ``CanJoinAllSpaces`` (which says the opposite) the window server resolved
+        the contradiction by treating the bar as a desktop-attached element, so
+        it got stranded on the desktop layer of one Space: visible when you were
+        on the desktop, hidden behind whatever app you'd switched to. Dropping
+        ``Stationary`` lets the bar genuinely ride on top of every Space.
+
+        ``IgnoresCycle`` just keeps the HUD out of ⌘` window cycling.
+
+        Re-asserted on every :meth:`show` (not only at build time) so a panel
+        that was created before the displays/Spaces settled — or had its level
+        nudged by anything else — is guaranteed to be floating each time it
+        appears.
+        """
+        panel = self._panel
+        if panel is None:
+            return
+        panel.setLevel_(NSScreenSaverWindowLevel)
+        panel.setCollectionBehavior_(
+            NSWindowCollectionBehaviorCanJoinAllSpaces
+            | NSWindowCollectionBehaviorFullScreenAuxiliary
+            | NSWindowCollectionBehaviorIgnoresCycle
+        )
 
     @objc.python_method
     def _pick_screen(self):
@@ -264,6 +297,9 @@ class Overlay(NSObject):
     def show(self):
         if self._panel is None:
             self.build()
+        # Re-assert the float-above-everything / all-Spaces behavior every time,
+        # so the bar can't get stranded on the desktop or behind the active app.
+        self._apply_floating_behavior()
         self._recompute_geometry()
         self._mode = "listening"
         self._history = [0.0] * len(self._history)  # start the waveform flat

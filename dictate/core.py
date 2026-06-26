@@ -18,9 +18,9 @@ States emitted via ``on_state(state, info)``:
 from __future__ import annotations
 
 import os
+import queue
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Optional
 
 import numpy as np
@@ -37,6 +37,19 @@ StateCallback = Callable[[str, Optional[dict]], None]
 
 _LOG_PATH = str(log_path())
 
+# Per-lane stall deadlines (seconds). A task in a lane that outlives its deadline
+# can only be *wedged* in a native call that never returned — no healthy task in
+# that lane ever runs this long — so the watchdog rebuilds the lane around it.
+# Generous enough that a legitimately slow operation never trips them:
+#   capture — start/stop the mic stream; real tasks finish in well under a second.
+#   inject  — clipboard write + ⌘V; sub-second in practice.
+#   stt     — model inference on up to max_record_seconds of audio; kept large so
+#             a slow machine on a long clip is never mistaken for a hang.
+_CAPTURE_STALL = 15.0
+_INJECT_STALL = 15.0
+_STT_STALL = 180.0
+_LANE_WATCH_INTERVAL = 2.0  # seconds between lane-health checks
+
 
 def _dlog(message: str) -> None:
     try:
@@ -46,12 +59,120 @@ def _dlog(message: str) -> None:
         pass
 
 
+class _Lane:
+    """A serial, self-healing single-worker task lane.
+
+    Tasks run one at a time in submission order — the engine depends on that (a
+    capture *start* must run before its matching *stop*; pastes must stay
+    ordered). The hazard of one worker is that a single task wedged in a native
+    call that never returns — a ⌘V into a hung window server, a CoreAudio open
+    caught in a device-change race — jams every later task in the lane forever,
+    which is precisely the "it just stops working until I restart it" failure.
+
+    So the engine's watchdog periodically calls :meth:`recover_if_stalled`: if the
+    in-flight task has run past a deadline it could only reach by hanging, the
+    wedged worker is abandoned (left as a leaked daemon thread that dies with the
+    process) and a fresh executor takes over, so the *next* task runs. The lane
+    heals itself instead of requiring an app restart.
+
+    :meth:`shutdown` is always bounded — it never waits unconditionally on a
+    worker, so a wedged lane can't freeze the quit path.
+    """
+
+    def __init__(self, name: str, stall_seconds: float, on_recover=None) -> None:
+        self.name = name
+        self._stall = stall_seconds
+        self._on_recover = on_recover
+        self._lock = threading.Lock()
+        self._closed = False
+        # Monotonic time the current task began, or None when idle. Written only by
+        # the active worker; a single attribute read/write is atomic in CPython, so
+        # the watchdog samples it without locking.
+        self._started_at: Optional[float] = None
+        self._queue: "queue.Queue" = queue.Queue()
+        self._thread = self._spawn()
+
+    def _spawn(self) -> threading.Thread:
+        # Daemon worker: an abandoned (wedged) worker after a recovery can never
+        # hold up interpreter exit — unlike a ThreadPoolExecutor thread, which the
+        # concurrent.futures atexit handler would try to join forever.
+        t = threading.Thread(
+            target=self._run, args=(self._queue,), name=self.name, daemon=True
+        )
+        t.start()
+        return t
+
+    def _run(self, q: "queue.Queue") -> None:
+        while True:
+            item = q.get()
+            if item is None:  # shutdown / abandon sentinel
+                return
+            fn, args = item
+            self._started_at = time.monotonic()
+            try:
+                fn(*args)
+            except Exception as exc:  # a lane task must never kill its worker
+                _dlog(f"lane '{self.name}' task error: {exc}")
+            finally:
+                self._started_at = None
+
+    def submit(self, fn, *args) -> None:
+        """Queue work on the lane (FIFO, one at a time). No-op if the lane is closed."""
+        with self._lock:
+            if self._closed:
+                return
+            self._queue.put((fn, args))
+
+    def recover_if_stalled(self) -> bool:
+        """If the in-flight task has hung past the deadline, rebuild the lane.
+
+        Returns True if a wedged worker was abandoned and a fresh one took over.
+        """
+        started = self._started_at
+        if started is None or (time.monotonic() - started) < self._stall:
+            return False
+        with self._lock:
+            if self._closed:
+                return False
+            # Abandon the wedged worker + its queue (the stuck daemon thread dies
+            # with the process) and start fresh, so new work runs immediately.
+            self._queue = queue.Queue()
+            self._started_at = None
+            self._thread = self._spawn()
+        if self._on_recover is not None:
+            try:
+                self._on_recover()
+            except Exception:
+                pass
+        return True
+
+    def shutdown(self, wait: bool = True, timeout: float = 1.0) -> None:
+        """Stop the lane, never blocking longer than ``timeout``.
+
+        Signals the worker to finish its current task and exit, then (optionally)
+        joins it with a hard cap — so a wedged task can't freeze the quit path the
+        way the old unbounded pool ``shutdown(wait=True)`` did. The worker is a
+        daemon, so even a join that times out leaves nothing to block process exit.
+        """
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+            self._queue.put(None)
+            t = self._thread
+        if wait:
+            t.join(timeout=timeout)
+
+
 class DictationEngine:
     def __init__(self, on_state: Optional[StateCallback] = None) -> None:
         self.recorder = Recorder()
         self.transcriber = create_transcriber()
         self.feedback = Feedback()
-        self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="dictate-stt")
+        # Each lane is a self-healing single worker (see _Lane). A task wedged in a
+        # never-returning native call gets its worker abandoned and rebuilt by the
+        # lane watchdog, so one stuck operation can no longer jam its lane forever.
+        self._pool = _Lane("dictate-stt", _STT_STALL)
         # A *separate* single worker that owns BOTH ends of capture — starting the
         # mic on press and finalising it on release. It must not share the
         # transcription pool: if a previous clip is still transcribing, the next
@@ -62,14 +183,24 @@ class DictationEngine:
         # servicing deadline and *disable the whole tap* — dropping that press and
         # every event after it ("it just stops working after a while"). Press and
         # release both queue here, so start always runs before its matching stop.
-        self._capture_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="dictate-cap")
+        # If a capture op ever hangs, recovery also resets the recorder so the next
+        # press starts cleanly.
+        self._capture_pool = _Lane("dictate-cap", _CAPTURE_STALL, on_recover=self._reset_recorder)
         # Text injection (clipboard write + ⌘V to the window server) runs here, OFF
         # the transcription pool. A paste can block on a wedged window server; if it
         # shared the STT worker, that one stuck paste would queue every future
         # transcription behind it forever ("stopped working"). On its own worker a
         # stuck paste only delays later pastes, never transcription, and the overlay
         # still retracts. Single worker keeps pastes (and the clipboard) ordered.
-        self._inject_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="dictate-inj")
+        self._inject_pool = _Lane("dictate-inj", _INJECT_STALL)
+        # Watches all three lanes and rebuilds any whose in-flight task has hung,
+        # so a wedged native call self-heals within a couple of seconds instead of
+        # bricking dictation until the app is restarted.
+        self._stop_lane_watchdog = threading.Event()
+        self._lane_watchdog = threading.Thread(
+            target=self._watch_lanes, name="dictate-laneguard", daemon=True
+        )
+        self._lane_watchdog.start()
         self._on_state: StateCallback = on_state or (lambda state, info=None: None)
         # Mic warm-window bookkeeping. The recorder leaves its stream running
         # between takes so a follow-up press captures instantly; after
@@ -184,15 +315,12 @@ class DictationEngine:
 
     def _fire_idle_release(self, gen: int) -> None:
         # Runs on the Timer thread; do the actual stream stop on the capture worker
-        # so it serialises with start/stop (never races a concurrent press). If the
-        # app is shutting down the pool may already be closed — skip rather than
-        # raise (RuntimeError) on a doomed submit.
+        # so it serialises with start/stop (never races a concurrent press). A
+        # submit after shutdown is a harmless no-op (the lane is closed), so the
+        # _shutting_down guard is just an early-out, not a correctness requirement.
         if self._shutting_down:
             return
-        try:
-            self._capture_pool.submit(lambda: self._release_if_idle(gen))
-        except RuntimeError:
-            pass  # pool shut down between the guard and here; nothing to do
+        self._capture_pool.submit(lambda: self._release_if_idle(gen))
 
     def _release_if_idle(self, gen: int) -> None:
         with self._idle_lock:
@@ -316,17 +444,46 @@ class DictationEngine:
         except Exception as exc:  # history must never break dictation
             _dlog(f"history write failed: {exc}")
 
+    # -- lane health ---------------------------------------------------------
+    def _reset_recorder(self) -> None:
+        """Recovery hook after a wedged capture task is abandoned.
+
+        The stuck task may have left the recorder mid-take; clear the flag so the
+        next press starts a fresh capture instead of short-circuiting on
+        ``if self._recording: return``. Plain atomic writes, safe to do from the
+        watchdog thread. Best-effort."""
+        try:
+            self.recorder._recording = False
+            self.recorder._level = 0.0
+        except Exception:
+            pass
+
+    def _watch_lanes(self) -> None:
+        """Rebuild any lane whose in-flight task has hung. Runs for the app's life."""
+        lanes = (self._capture_pool, self._pool, self._inject_pool)
+        while not self._stop_lane_watchdog.wait(_LANE_WATCH_INTERVAL):
+            for lane in lanes:
+                try:
+                    if lane.recover_if_stalled():
+                        _dlog(f"lane '{lane.name}' wedged on a hung task — rebuilt it; dictation recovered")
+                except Exception as exc:  # the watchdog must never die
+                    _dlog(f"lane watchdog error: {exc}")
+
     def shutdown(self) -> None:
-        # Drain in dependency order and WAIT, so nothing native is mid-flight when
-        # the process exits (the abandoned-thread race that crashed quit):
+        # Drain in dependency order, but with BOUNDED waits so a wedged worker can
+        # never freeze the quit path (the original unbounded wait=True turned a
+        # stuck paste/audio-open into a frozen, un-quittable app). Order:
         #   capture  -> finishes any start/stop/finalize (and stops queuing work),
         #   stt      -> finishes the in-flight transcription (it may hand text to
         #               the inject pool, which is still open at this point),
         #   inject   -> finishes the paste + done cue,
         #   recorder -> closed last, once no capture task can still touch it.
+        # Anything still wedged past these timeouts is left to the caller's deadman
+        # (menu_app force-exits the process), so quit is always prompt.
         self._shutting_down = True
         self._cancel_idle_release()
-        self._capture_pool.shutdown(wait=True)
-        self._pool.shutdown(wait=True)
-        self._inject_pool.shutdown(wait=True)
+        self._stop_lane_watchdog.set()
+        self._capture_pool.shutdown(wait=True, timeout=1.0)
+        self._pool.shutdown(wait=True, timeout=1.0)
+        self._inject_pool.shutdown(wait=True, timeout=1.0)
         self.recorder.close()

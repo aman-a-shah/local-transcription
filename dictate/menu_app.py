@@ -57,6 +57,25 @@ def _traceback() -> str:
     return traceback.format_exc()
 
 
+def _arm_deadman(seconds: float) -> None:
+    """Force a clean process exit after ``seconds``, regardless of what is wedged.
+
+    A daemon timer that calls ``os._exit(0)`` so a stuck background worker (a hung
+    paste, a CoreAudio open that never returns, a thread pool that won't drain) can
+    never keep the app from quitting. ``os._exit`` is deliberate: it bypasses the
+    interpreter shutdown / thread-join that both crashes the app (native threads
+    racing exit) and hangs it (concurrent.futures' atexit handler joining a wedged
+    worker). If the clean teardown finishes first we ``os._exit`` before this
+    fires; the timer is a daemon, so it never keeps the process alive on its own."""
+    def _fire():
+        _log("deadman: teardown didn't finish in time — force-exiting")
+        os._exit(0)
+
+    timer = threading.Timer(seconds, _fire)
+    timer.daemon = True
+    timer.start()
+
+
 # Menu-bar icon per engine state. Rendered as monochrome SF Symbol *template*
 # images so they sit natively in the menu bar (auto-tinting for light/dark,
 # matching the system's own icons) instead of a loud emoji. A `waveform` mark
@@ -328,6 +347,12 @@ class DictationController(NSObject):
 
     @objc.python_method
     def _alert(self, title, message):
+        # Bring the (accessory) app forward first. Without this, an accessory app
+        # — no Dock icon, usually not the active app — can open its alert unfocused
+        # or behind other windows while runModal blocks the main thread, so the app
+        # looks frozen with no visible dialog to dismiss. Activating guarantees the
+        # modal is front-most and dismissible.
+        NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
         alert = NSAlert.alloc().init()
         alert.setMessageText_(title)
         alert.setInformativeText_(message)
@@ -340,17 +365,40 @@ class DictationController(NSObject):
         open_dashboard()
 
     def quitApp_(self, _):  # noqa: N802
-        # Tear everything down BEFORE terminate_ runs exit(): a clean stop here
-        # means no background thread (event tap, watchdog, overlay timer, audio
-        # callback) is still running native code when the process exits — that
-        # race was the crash-on-quit.
-        self._teardown()
-        NSApplication.sharedApplication().terminate_(self)
+        self._terminate()
 
     def applicationWillTerminate_(self, _notification):  # noqa: N802
         # Backstop for any other termination route (Cmd-Q, logout, the app menu).
         # Idempotent with quitApp_, so running both is harmless.
-        self._teardown()
+        self._terminate()
+
+    @objc.python_method
+    def _terminate(self):
+        """Quit for good — guaranteed prompt, crash-free, and never frozen.
+
+        Pressing Quit used to hang whenever a background worker was wedged: the old
+        path waited (unbounded) for every thread pool to drain on the main thread,
+        so one stuck paste / audio open froze the menu and the app could neither
+        quit nor restart. Now we:
+          1. arm a hard deadman that force-exits the process after a short grace no
+             matter what is wedged,
+          2. tear down best-effort with bounded waits, then
+          3. exit via os._exit — which skips the interpreter / native-thread
+             teardown (and the concurrent.futures atexit join of any wedged
+             worker) that originally crashed *and* hung the app on quit.
+        Either the clean path reaches os._exit in a few ms, or the deadman fires —
+        but the process always dies promptly.
+        """
+        if getattr(self, "_terminating", False):
+            return
+        self._terminating = True
+        _arm_deadman(4.0)
+        try:
+            self._teardown()
+        except Exception:
+            _log("terminate: teardown failed\n" + _traceback())
+        _log("=== Local Dictation exiting ===")
+        os._exit(0)
 
     @objc.python_method
     def _teardown(self):
